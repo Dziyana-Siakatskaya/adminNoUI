@@ -1,0 +1,89 @@
+package com.epam.edu.student.job;
+
+import javax.sql.DataSource;
+
+import org.apache.log4j.Logger;
+import org.springframework.batch.core.Job;
+import org.springframework.batch.core.Step;
+import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
+import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
+import org.springframework.batch.core.configuration.annotation.StepScope;
+import org.springframework.batch.item.ItemProcessor;
+import org.springframework.batch.item.ItemReader;
+import org.springframework.batch.item.ItemWriter;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+import com.epam.edu.student.job.processor.RestTemplateProcessor;
+import com.epam.edu.student.job.reader.RestTemplateReader;
+import com.epam.edu.student.job.writer.RestTemplateWriter;
+import com.epam.edu.student.model.Alerts;
+
+@Configuration
+public class RestTemplateRequestJob {
+	private static final Logger LOG = Logger.getLogger(DBtoXMLJob.class);
+	// ==> 09:52:56 WARN ConfigurationClassEnhancer intercept @Bean method
+	// ScopeConfiguration.jobScope is non-static and returns an object
+	// assignable to Spring's BeanFactoryPostProcessor interface. This will
+	// result in a failure to process annotations such as @Autowired, @Resource
+	// and @PostConstruct within the method's declaring @Configuration class.
+	// Add the 'static' modifier to this method to avoid these container
+	// lifecycle issues; see @Bean javadoc for complete details
+	
+	// ==> 09:52:56 WARN AbstractListenerFactoryBean isListener
+	// org.springframework.batch.item.ItemReader is an interface. The
+	// implementing class will not be queried for annotation based listener
+	// configurations. If using @StepScope on a @Bean method, be sure to return
+	// the implementing class so listner annotations can be used.
+
+	@Autowired
+	DataSource myDataSource;
+
+	@Autowired
+	private StepBuilderFactory stepBuilderFactory;
+
+	@Bean(name = "restTemplateRead")
+	@StepScope
+	public ItemReader<Alerts> restTemplateRead(
+			@Value("#{jobParameters[alertTypeId]}") long alertTypeId,
+			@Value("#{jobParameters[alertCount]}") long alertCount)
+			throws Exception {
+		return new RestTemplateReader(alertTypeId, alertCount);
+	}
+
+	@Bean(name = "restTemplateWriter")
+	public ItemWriter<Alerts> writer() {
+		return new RestTemplateWriter();
+	}
+
+	/*@Bean
+	public Marshaller myMarshaller() {
+		Jaxb2Marshaller marshaller = new Jaxb2Marshaller();
+		marshaller.setClassesToBeBound(Alerts.class);
+		return marshaller;
+	}*/
+
+	@Bean(name = "restTemplateProcessor")
+	public ItemProcessor<Alerts, Alerts> processor() {
+		return new RestTemplateProcessor();
+	}
+	
+	@Bean(name = "restTemplateJob")
+	public Job restTemplateJob(JobBuilderFactory jobs, Step restTemplateStep)
+			throws Exception {
+		return jobs.get("restTemplateJob").flow(restTemplateStep).end()
+				.build();
+	}
+
+	@Bean
+	public Step restTemplateStep(ItemReader<Alerts> restTemplateRead, ItemWriter<? super Alerts> restTemplateWriter, ItemProcessor<? super Alerts, ? extends Alerts> restTemplateProcessor)
+			throws Exception {
+		return stepBuilderFactory.get("restTemplateStep")
+				.<Alerts, Alerts> chunk(1).reader(restTemplateRead)
+				.processor(restTemplateProcessor).writer(restTemplateWriter).faultTolerant()
+				.build();
+	}
+
+}
